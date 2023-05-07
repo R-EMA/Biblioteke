@@ -1,0 +1,377 @@
+CREATE DATABASE biblioteke; 
+
+USE biblioteke; # ako se sve odjednom pokrene, rađeno je deo po deo
+
+# tabela BIBLIOTEKE
+CREATE TABLE IF NOT EXISTS biblioteke (
+	id_biblioteka INT NOT NULL PRIMARY KEY,
+    naziv_biblioteka VARCHAR(45) NOT NULL,
+    ulica_biblioteka VARCHAR(45) NOT NULL,
+    broj_biblioteka VARCHAR(10) NOT NULL,
+    mesto_biblioteka VARCHAR(45) NOT NULL,
+    tf_biblioteka VARCHAR(20) NOT NULL,
+    tip_biblioteka ENUM ("narodna", "školska", "univerzitetska", "verska", "privatna", "ostalo") NOT NULL DEFAULT "narodna"
+) ENGINE = INNODB;
+
+# tabela BIBLIOTEKARI
+# jedan bibliotekar može biti radnik u više biblioteka, ...
+# ... pa će veza biti određena međutabelom
+CREATE TABLE IF NOT EXISTS bibliotekari (
+	id_bibliotekar INT NOT NULL PRIMARY KEY,
+    ime_bibliotekar VARCHAR(45) NOT NULL,
+    prezime_bibliotekar VARCHAR(45) NOT NULL,
+    mesto_bibliotekar VARCHAR(45) NOT NULL,
+    ulica_bibliotekar VARCHAR(45) NOT NULL,
+    broj_bibliotekar VARCHAR(45) NOT NULL,
+    jmbg_bibliotekar VARCHAR(13) NOT NULL,
+    telefon_bibliotekar VARCHAR(20)   
+) ENGINE = INNODB;
+
+# tabela BIBLIOTEKE_BIBLIOTEKARI (bb)
+# veza između bibliotekara i biblioteke
+CREATE TABLE IF NOT EXISTS bb (
+	id_bb INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    id_biblioteka INT NOT NULL,
+    id_bibliotekar INT NOT NULL,
+    FOREIGN KEY (id_biblioteka) REFERENCES biblioteke(id_biblioteka)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (id_bibliotekar) REFERENCES bibliotekari(id_bibliotekar)
+    ON UPDATE CASCADE ON DELETE NO ACTION
+) ENGINE = INNODB;
+
+# tabela ČLANOVI
+# s obzirom da jedna osoba može biti član više biblioteka, ...
+# ... pripadnost biće određena međutabelom koja će povezivati članove i biblioteke
+# (mislim da u realnom svetu ne postoji takav odnos i da svaka biblioteka ima svoju "bazu" članova)
+CREATE TABLE IF NOT EXISTS clanovi (
+	id_clan INT NOT NULL PRIMARY KEY,
+    ime_clan VARCHAR(45) NOT NULL,
+    prezime_clan VARCHAR(45) NOT NULL,
+    datum_rodjenja_clan DATE NOT NULL,
+    jmbg_clan VARCHAR(13),  # zbog toga što su bibliotekari i članovi osobe (ovde je ostavljeno da član ima mogućnost da ne ostavi jmbg broj)
+    # Napomena: pri proveri ispravnosti, ostaviti da ništa ne radi ako je prazno
+    telefon_clan VARCHAR(20),
+    mesto_clan VARCHAR(45) NOT NULL,
+    ulica_clan VARCHAR(45) NOT NULL,
+    broj_clan VARCHAR(10) NOT NULL
+) ENGINE = INNODB;
+
+# tabela BIBLIOTEKE_ČLANOVI (bc)
+# veza između biblioteka i članova
+CREATE TABLE IF NOT EXISTS bc (
+	id_bc INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    broj_clanske_karte VARCHAR(20) NOT NULL, # jer je često oblika BROJ/TEKUĆA-GODINA a može da sadrži neke dodatne odrednice
+    kategorija ENUM ("dete", "učenik", "student", "zaposleni", "penzioner", "nezaposleni", "ostalo") NOT NULL DEFAULT "zaposleni",
+    id_biblioteka INT NOT NULL,
+    id_clan INT NOT NULL,
+    FOREIGN KEY (id_biblioteka) REFERENCES biblioteke(id_biblioteka)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (id_clan) REFERENCES clanovi(id_clan)
+    ON UPDATE CASCADE ON DELETE NO ACTION
+) ENGINE = INNODB;
+
+# tabele vezane za knjige
+# tabela IZDAVAČI
+CREATE TABLE IF NOT EXISTS izdavaci (
+	id_izdavac INT NOT NULL PRIMARY KEY,
+    naziv_izdavac VARCHAR(45) NOT NULL,
+    drzava_izdavac VARCHAR(45) NOT NULL DEFAULT "Republika Srbija",
+    mesto_izdavac VARCHAR(45) NOT NULL,
+    ulica_izdavac VARCHAR(45),
+    broj_izdavac VARCHAR(10)
+) ENGINE = INNODB;
+
+# tabela AUTORI
+CREATE TABLE IF NOT EXISTS autori (
+	id_autor INT NOT NULL PRIMARY KEY,
+    ime_autor VARCHAR(45) NOT NULL,
+    prezime_autor VARCHAR(45) NOT NULL
+) ENGINE = INNODB;
+
+# tabela ŽANROVI (žanr knjige)
+# može da bude enum tip u tabeli knjige, ali mislim da je ovde fleksibilnije
+CREATE TABLE IF NOT EXISTS zanrovi (
+	id_zanr INT NOT NULL PRIMARY KEY,
+    naziv_zanr VARCHAR(45) NOT NULL,
+    opis_zanr VARCHAR(255) NOT NULL # kratak opis žanra
+) ENGINE = INNODB;
+
+# tabela ODELJENJA
+# vezani su za biblioteke, ali ovde će biti sva odeljenja svih biblioteka, ...
+# ... a indirektno će biti povezani sa biblitekama preko knjiga (pripadnost knjige odeljenju i biblioteci)
+CREATE TABLE IF NOT EXISTS odeljenja (
+	id_odeljenje INT NOT NULL PRIMARY KEY,
+    naziv_odeljenje VARCHAR(45) NOT NULL,  # pozajamno, dečije, naučno, ....
+    opis_odeljenje VARCHAR(255) NOT NULL # kratak opis odeljenja
+) ENGINE = INNODB;
+
+# prvo MORA da je pozajamno jer je ono glavno u svakoj biblioteci
+# unosom odmah posle kreiranja osigurava se da isto bude prvo definisano
+# ovde će biti dodata i najčešća dva odeljenja biblioteke: naučno (stručno) i dečije.
+INSERT INTO odeljenja(id_odeljenje, naziv_odeljenje, opis_odeljenje) VALUES 
+(1, "pozajamno odeljenje", "glavno odeljenje biblioteke"),
+(2, "dečje odeljenje", "knjige, časopisi za decu predškolskog i školskog uzrasta starosti do 15 godina; školska lektira"), 
+(3, "naučno odeljenje", "knjige, časopisi i univerzitetski udžbenici iz različitih naučnih oblasti");
+
+# tabela KNJIGE
+CREATE TABLE IF NOT EXISTS knjige (
+	id_knjiga INT NOT NULL PRIMARY KEY,
+    isbn_kniga VARCHAR(17) NOT NULL UNIQUE, # 13cifara + 4 delioca grupa; pri štampi dodati kao prefiks ISBN (postoje i drugi formati)
+    naziv_kniga VARCHAR(100) NOT NULL,
+    jezik_knjiga VARCHAR(45) NOT NULL DEFAULT "srpski", # jezik na kome je knjiga napisana
+    status_knjiga TINYINT(1) NOT NULL DEFAULT 1, # 1 - može da se iznajmljuje (true), 0 - samo čitaonica (false)
+    aktuelnost_kniga VARCHAR(45) NOT NULL, # aktuelnost knjige: bestseler, ...
+    zanr_knjiga INT NOT NULL, # (žanr) id žanra knjige
+    izdavac_knjiga INT NOT NULL, # (izdavač) iz izdavača knjige
+    odeljenje_knjiga INT NOT NULL DEFAULT 1, # (pozajamno)
+    FOREIGN KEY (zanr_knjiga) REFERENCES zanrovi(id_zanr)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (izdavac_knjiga) REFERENCES izdavaci(id_izdavac)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (odeljenje_knjiga) REFERENCES odeljenja(id_odeljenje)
+    ON UPDATE CASCADE ON DELETE NO ACTION
+) ENGINE = INNODB;
+
+# tabela KNIGE_AUTORI jer jedan pisac može da bude autor više knjiga, a jednu knjigu može napisati više autora
+# (uobičajena situacija kod stručnih knjiga)
+# Napomena: uslov je da autor može biti upisan, ako je upisano bar jedno njegovo delo,...
+# ovo znači da se sw unosi knjiga, traži autor pa ako ga nema na spisku dodaje se
+CREATE TABLE IF NOT EXISTS knjige_autori (
+	id_ka INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    id_knjiga INT NOT NULL,
+    id_autor INT NOT NULL,
+    FOREIGN KEY (id_knjiga) REFERENCES knjige(id_knjiga)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (id_autor) REFERENCES autori(id_autor)
+    ON UPDATE CASCADE ON DELETE NO ACTION
+) ENGINE = INNODB;
+
+# tabela NAUCNA_KNJIGA  (dodatni podaci za knjige smeštene na naučnom (stručno) odeljenju)
+# if odeljenje = 3 then ...
+CREATE TABLE IF NOT EXISTS naucna_knjiga (
+	id_nk INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    naucna_oblast VARCHAR(100) NOT NULL, # kandidat da bude strani ključ ka spoljnoj tabeli (da ne komplikujem još više xD )
+    id_knjiga INT NOT NULL,
+    FOREIGN KEY (id_knjiga) REFERENCES knjige(id_knjiga)
+    ON UPDATE CASCADE ON DELETE NO ACTION
+) ENGINE = INNODB;
+
+# tabela DEČIJA_KNJIGA   (dodatni podaci za knjige smeštene na dečijem odeljenju)
+# if odeljenje = 2 then ...
+CREATE TABLE IF NOT EXISTS decija_knjiga (
+	id_dk INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    uzrast INT NOT NULL DEFAULT 10, # uzrast deteta u vidu broja godina, npr. za dete koje ima najmanje 10 godina
+    id_knjiga INT NOT NULL,
+    FOREIGN KEY (id_knjiga) REFERENCES knjige(id_knjiga)
+    ON UPDATE CASCADE ON DELETE NO ACTION
+) ENGINE = INNODB;
+
+# tabela KNJIGE_BIBLIOTEKE (kb)    (pripadnost knjige jednoj biblioteci)
+CREATE TABLE IF NOT EXISTS kb (
+	id_kb INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    broj_primeraka INT NOT NULL DEFAULT 1, # koliko knjiga (isti isbn, autor-i, izdavač) poseduje konkretna biblioteka
+    id_knjiga INT NOT NULL,
+    id_biblioteka INT NOT NULL,
+    FOREIGN KEY (id_knjiga) REFERENCES knjige(id_knjiga)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (id_biblioteka) REFERENCES biblioteke(id_biblioteka)
+    ON UPDATE CASCADE ON DELETE NO ACTION    
+) ENGINE = INNODB;
+
+# tabela IZDAVANJE_KNJIGA (prometi)
+CREATE TABLE IF NOT EXISTS prometi (
+	id_prometa INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    datum_zaduzenja DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, # automatska dodela datuma i vremena izdavanja knjige
+    datum_razduzenja DATETIME, # automatska dodela datuma i vremena kada je kniga vraćena
+    id_biblioteka INT NOT NULL,  # automatski dodeljeno na osnovu izbora biblioteke
+    id_bibliotekar INT NOT NULL, # automatski dodeljeno na osnovu ulogovanog bibliotekara
+    id_clan INT NOT NULL,
+    id_knjiga INT NOT NULL,
+    FOREIGN KEY (id_biblioteka) REFERENCES biblioteke(id_biblioteka)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (id_bibliotekar) REFERENCES bibliotekari(id_bibliotekar)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (id_clan) REFERENCES clanovi(id_clan)
+    ON UPDATE CASCADE ON DELETE NO ACTION,
+    FOREIGN KEY (id_knjiga) REFERENCES knjige(id_knjiga)
+    ON UPDATE CASCADE ON DELETE NO ACTION
+) ENGINE = INNODB;
+
+### NAPOMENE ###
+# nedostaju informacije o privilegijama bibliotekara (administrator, korisnik)
+# korisnik treba da ima dozvolu pregleda stanja zaduženja postojećih članova, zaduženja/razduženja knjiga, upis novih članova
+# administrator sve što i korisnik plus mogućnost upisa novih knjiga i brisanje postojećih (izgubljene, pohabane, poklonjene knjige i slično)
+# ... to automatski povlači i postojanje novih tabela, npr. kao što je
+# tabela lozinki (enkriptovano) bibliotekara
+#
+# za sada ostaje sve na poverenju, tj. da će se bibliotekar ulogovati svojim nalogom i raditi samo ono što mu je rečeno da sme da radi
+#
+################
+
+
+
+### UNOS PODATAKA ###
+#####################
+
+# BIBLIOTEKE
+INSERT INTO `biblioteke`(`id_biblioteka`, `naziv_biblioteka`, `ulica_biblioteka`, `broj_biblioteka`, `mesto_biblioteka`, `tf_biblioteka`, `tip_biblioteka`) VALUES 
+(1, 'Narodna biblioteka "Veljko Dugošević"', 'Cara Lazara', '13A','Golubac', '012/678-136','narodna'),
+(2, 'Narodna biblioteka "Vuk Karadžić"', 'Kneza Lazara', '6', 'Veliko Gradište', '012/662-208','narodna'),
+(3, 'Narodna biblioteka "Ilija M. Petrović"', 'Drinska', '2', 'Požarevac', '012/221-957', 'narodna');
+
+# BIBLIOTEKARI
+INSERT INTO `bibliotekari`(`id_bibliotekar`, `ime_bibliotekar`, `prezime_bibliotekar`, `mesto_bibliotekar`, `ulica_bibliotekar`, `broj_bibliotekar`, `jmbg_bibliotekar`, `telefon_bibliotekar`) VALUES 
+(1,'Petar','Petrović','Golubac','Cara Lazara','61','0102985764591','064/6644-758'), 
+(2,'Miladinka','Simić','Tribrode','Tribrode','bb','1507978764591','063/6363-000'),
+(3,'Nela','Ilić','Požarevac','Tabačka čaršija','18/8','0101976767880','061/0088-800'),
+(4,'Bojan','Marić','Veliko Gradište','Voje Bogdanovića','8','3003990761288','065/6558-000'),
+(5,'Jana','Jovanović','Požarevac','Čede Vasovića','43/25','2008998768780','062/6262-222');
+
+# BIBLIOTEKE_BIBLIOTEKARI
+INSERT INTO `bb`(`id_biblioteka`, `id_bibliotekar`) VALUES 
+(1,2), (1,1), (2,2), (3,3), (3,5), (2,4);
+
+# ŽANROVI knjiga 
+INSERT INTO `zanrovi`(`id_zanr`, `naziv_zanr`, `opis_zanr`) VALUES 
+(1,'roman','opšta lepa književnost za odrasle'),
+(2,'naučna fantastika','izmišljena budućnost ili prošlost, naučno bazirano'),
+(3,'epska fantastika','bazirano na narodnim mitovima'),
+(4,'ljubavni roman','romantična književnost'),
+(5,'trileri','akcija, misterija, politika ... su u prvom planu'),
+(6,'dečja književnost','knjige namenjene deci'),
+(7,'naučna knjiga','stručna literatura');
+
+# IZDAVAČI
+INSERT INTO `izdavaci`(`id_izdavac`, `naziv_izdavac`, `drzava_izdavac`, `mesto_izdavac`, `ulica_izdavac`, `broj_izdavac`) VALUES 
+(1,'Mikro Knjiga','Srbija','Beograd','Kneza Višeslava','34'), 
+(2,'Laguna','Srbija','Beograd','Kralja Petra','45'), 
+(3,'Vulkan','Srbija','Beograd','Sremska','2'), 
+(4,'Kompjuter biblioteka','Srbija','Čačak','',''), 
+(5,'Kompjuter biblioteka','Srbija','Beograd','Obalskih radnika','4a'), 
+(6,'Prosveta','Srbija','Beograd','Kneza Mihaila','12'), 
+(7,'Kreativni centar','Srbija','Beograd','Gradištanska','8'), 
+(8,'Logos','Srbija','Beograd','',''), 
+(9,'Dečje novine','Srbija','Gornji Milanovac','',''), 
+(10,'Kosmos izdavaštvo','Srbija','Beograd','Jurija Gagarina','102'), 
+(11,'Nolit','Srbija','Beograd','Terazije','27/II'), 
+(12,'Univerzitet Singidunum','Srbija','Beograd','','');
+
+# AUTORI
+INSERT INTO `autori`(`id_autor`, `ime_autor`, `prezime_autor`) VALUES 
+(1,'Lav Nikolajevič','Tolstoj'), 
+(2,'Den','Simon'), 
+(3,'Džin','Rodenberi'), 
+(4,'Isak','Asimov'), 
+(5,'Džejn','Ostin'), 
+(6,'Natsukawa','Sosuke'), 
+(7,'Hans Kristijan','Andersen'), 
+(8,'Federika','Nučo'), 
+(9,'Igor','Kolarov'), 
+(10,'Maks','Vejnrajt'), 
+(11,'Lui','Stouen'), 
+(12,'Rouzi','Dikins'), 
+(13,'Dragan','Stojanović'), 
+(14,'Brus','Ekel'), 
+(15,'Milan','Gocić'), 
+(16,'Miodrag','Živković'), 
+(17,'Li','Harper'), 
+(18,'Glen D.','Singh'), 
+(19,'Rasel A.','Stulc');
+
+# KNJIGE
+INSERT INTO `knjige`(`id_knjiga`, `isbn_kniga`, `naziv_kniga`, `jezik_knjiga`, `status_knjiga`, `aktuelnost_kniga`, `zanr_knjiga`, `izdavac_knjiga`, `odeljenje_knjiga`) VALUES 
+(1,'86-07-00159-0','Rat i mir','srpski',1,'klasik',1,6,1), 
+(2,'86-7436-244-3','Hiperion','srpski',1,'bestseler',2,2,1),
+(3,'no ISBN 1','Zvezdane staze','srpski',0,'klasik',2,9,1),
+(4,'no ISBN 2','Bogovi lično','srpski',1,'klasik',2,10,1),
+(5,'978-86-6369-055-4','Gordost i predrasuda','srpski',1,'bestseler',4,10,1),
+(6,'978-86-521-4522-5','Mačak koji je spasao knjige','srpski',1,'bestseler',6,2,2),
+(7,'86-19-01963-5','Bajke i priče','srpski',1,'preporuka',6,11,2),
+(8,'978-86-10-03144-7','Najlepše bakine priče','srpski',1,'preporuka',6,3,2),
+(9,'978-86-521-2439-8','Agi i Ema','srpski',1,'bestseler',6,2,2), 
+(10,'978-86-521-2390-2','Nauči da programiraš: programiranje za decu','srpski',1,'popularno',7,2,3), 
+(11,'978-86-529-0485-3','Programiranje za početnike na jeziku Python','srpski',1,'aktuelno',7,7,3), 
+(12,'86-7360-037-5','Photoshop CS priručnik','srpski',0,'-',7,8,3), 
+(13,'978-86-7555-308-3','Misliti na Javi','srpski',1,'aktuelno',7,1,3),
+(14,'978-86-7555-217-3','Misliti na jeziku C++','srpski',1,'aktuelno',7,1,3),
+(15,'978-86-7912-698-6','Programski jezici: web servisi i napredno programiranje u Spring okruženju','srpski',1,'klasik',7,12,3), 
+(16,'978-86-7555-366-3','Algoritamsko rešavanje problema i objektno orijentisan pristup u Javi','srpski',1,'klasik',7,1,3), 
+(17,'978-86-521-1857-1','Ubiti pticu rugalicu','srpski',1,'bestseler',5,2,1), 
+(18,'978-86-7310-585-7','Kali Linux','srpski',0,'-',7,5,3), 
+(19,'86-7310-007-0','Naučite Microsoft Office 97','srpski',0,'-',7,4,3);
+
+# DEČJA_KNJIGA (dodatne informacije za knjige na dečjem odeljenju)
+INSERT INTO `decja_knjiga`(`uzrast`, `id_knjiga`) VALUES (12,6), (2,7), (2,8), (10,9);
+
+# NAUČNA_KNIGA (dodatne informacije za knjige na naučnom - stručnom odeljenju
+INSERT INTO `naucna_knjiga`(`naucna_oblast`, `id_knjiga`) VALUES 
+('programiranje',10), ('programiranje; Python',11), ('rasterska grafika; Photoshop',12), ('programiranje; Java',13), ('programiranje; C++',14), ('programiranje; Java',15), 
+('programiranje; Java',16), ('operativni sistemi; Linux',18), 
+('office paketi; MS Office',19);
+
+# KNJIGE_AUTORI (veza između knjiga (dela) i autora)
+INSERT INTO `knjige_autori`(`id_knjiga`, `id_autor`) VALUES 
+(1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10), 
+(11,11), (11,12), (12,13), (13,14), (14,14), (15,16), (16,15), (17,17), (18,18);
+
+# KNJIGE_BIBLIOTEKE (veza između knjiga i biblioteka)
+INSERT INTO `kb`(`broj_primeraka`, `id_knjiga`, `id_biblioteka`) VALUES 
+(5,1,3), (7,2,3), (1,3,3), (3,4,3), (5,5,3), (4,6,3), (8,7,3), (8,8,3), (5,9,3), 
+(3,10,3), (3,11,3), (2,12,3), (4,13,3), (3,14,3), (4,15,3), (5,16,3), (6,17,3), (1,18,3),
+(2,19,3), 
+(4,1,1), (8,2,1), (1,3,1), (4,4,1), (4,5,1), (4,6,1), (7,7,1), (7,8,1), (3,9,1), 
+(3,11,1), (1,12,1), (4,13,1), (3,15,1), (4,17,1), (1,19,1), 
+(5,1,2), (6,2,2), (4,4,2), (5,5,2), (4,6,2), (6,7,2), (7,8,2), (4,9,2), 
+(2,10,2), (4,11,2), (1,12,2), (3,13,2), (2,14,2), (3,15,2), (2,16,2), (4,17,2), (1,18,3);
+# Napomena: status knjige je možda bolje staviti ovde (onako je univerzalan, bez obzira na broj primeraka knjige)
+
+# ČLANOVI
+INSERT INTO `clanovi`(`id_clan`, `ime_clan`, `prezime_clan`, `datum_rodjenja_clan`, `jmbg_clan`, `telefon_clan`, `mesto_clan`, `ulica_clan`, `broj_clan`) VALUES 
+(1,'Ana','Anokić','2003-05-01','0105003768511','060/1111-111','Golubac','Parlog','bb'), 
+(2,'Mihajlo','Petrović','1956-11-18','1811956761255','062/6222-116','Snegotin','Snegotin','bb'), 
+(3,'Nina','Tomić','2010-07-01','','','Krivača','Krivača','bb'), 
+(4,'Milica','Arsić','2009-01-18','','064/1253-111','Veliko Gradište','Albanske spomenice','40'), 
+(5,'Aleksa','Aleksić','2007-05-11','','069/1788-181','Carevac','Carevac','bb'), 
+(6,'Anica','Aleksić','2011-08-08','','069/1788-181','Carevac','Carevac','bb'), 
+(7,'Zorica','Jovanović','1985-12-01','0112985768790','063/1111-111','Požarevac','Užička','15'), 
+(8,'Dragan','Petrović','2012-02-04','','','Požarevac','Stiška','8');
+
+# BIBLIOTEKA_ČLANOVI (veza između članova i biblioteka)
+INSERT INTO `bc`(`broj_clanske_karte`, `kategorija`, `id_biblioteka`, `id_clan`) VALUES 
+('0081/2023','učenik',3,8), ('12/23','učenik',1,3), ('045/2023','učenik',2,4), 
+('018/2023','učenik',2,5), ('0128/2023','učenik',3,5), ('38/23','student',1,1), ('0478/2023','student',3,1), ('018/2023','student',2,1), ('1007/2023','zaposleni',3,7), ('0003/2023','penzioner',3,2), ('019/2023','učenik',2,6);
+
+# PROMETI (razduženje-zaduženje knjige)
+# ovo je idealno za obradu kroz JAVA kod
+INSERT INTO `prometi`(`datum_zaduzenja`, `datum_razduzenja`, `id_biblioteka`, `id_bibliotekar`, `id_clan`, `id_knjiga`) VALUES 
+('2023-04-20 12:30:14','2023-05-05 14:00:18',1,2,3,10), 
+('2023-04-20 12:30:45','2023-05-05 14:00:18',1,2,3,6);
+
+
+
+### procedure ###
+
+# procedura show_tabela(tabela) koja prikazuje sadržaj bilo koje tabele
+DELIMITER //
+DROP PROCEDURE IF EXISTS show_tabela //
+CREATE PROCEDURE show_tabela(IN t VARCHAR(50))
+BEGIN 
+	SET @sql = CONCAT('SELECT * FROM ',t);
+    PREPARE stmp FROM @sql;
+    EXECUTE stmp;
+    DEALLOCATE PREPARE stmp;	
+END //
+DELIMITER ;
+
+# procedura show_knjige koja prikazuje knjige + naziv autora
+DELIMITER //
+CREATE PROCEDURE show_knjige()
+BEGIN
+	SET @rb = 0; 
+    SELECT @rb := @rb + 1 AS 'rb', k.naziv_kniga, 
+    CONCAT(a.ime_autor,' ',a.prezime_autor) AS 'autor' 
+    FROM knjige AS k 
+    INNER JOIN knjige_autori AS ka USING(id_knjiga) 
+    INNER JOIN autori AS a USING(id_autor);
+END //
+DELIMITER ;
